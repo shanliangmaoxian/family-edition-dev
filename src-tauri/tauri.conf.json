@@ -6,6 +6,7 @@
   "plugins": {
     "sql": {},
     "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI5QUYwNEU2NTgyMUU4NUMKUldSYzZDRlk1Z1N2dVoyT2tiQmJKa1BZdGZ1b2l6cHF6VUVhN1BhOXZCMytlTHI3U0lRMDhVZWMK",
       "endpoints": [
         "https://github.com/USER/REPO/releases/latest/download/latest.json"
       ]
