@@ -1,49 +1,49 @@
 import fs from 'fs';
 import path from 'path';
 
-// 从 package.json 获取版本号
 const pkg = JSON.parse(fs.readFileSync('./package.json', 'utf-8'));
 const version = pkg.version;
-
-// 配置你的 GitHub 信息 (可以从环境变量获取)
 const owner = process.env.GITHUB_REPOSITORY_OWNER;
 const repo = process.env.GITHUB_REPOSITORY.split('/')[1];
-
-// 这里的文件名需要匹配你打包生成的实际文件名，通常是 x64 的 msi 或 nsis
-// 注意：Tauri 2.0 默认在 Windows 上生成 .msi.zip 或 .exe
 const platform = 'windows-x86_64';
-const bundleDir = './src-tauri/target/release/bundle/msi'; // 如果你用的是 nsis，请改为 nsis
 
-function getSignature(filePath) {
-  if (fs.existsSync(filePath + '.sig')) {
-    return fs.readFileSync(filePath + '.sig', 'utf-8');
+// Tauri 2.0 编译产物可能在不同子目录，我们递归查找一下
+function findBundleFile(dir, extensions) {
+  if (!fs.existsSync(dir)) return null;
+  const files = fs.readdirSync(dir, { recursive: true });
+  for (const file of files) {
+    const filePath = path.join(dir, file);
+    if (extensions.some(ext => file.endsWith(ext)) && !file.endsWith('.sig')) {
+      return filePath;
+    }
   }
-  return '';
+  return null;
 }
 
-// 查找安装包文件 (示例匹配 .msi)
-const files = fs.readdirSync(bundleDir);
-const assetFile = files.find(f => f.endsWith('.msi') && !f.endsWith('.sig'));
+const bundleRoot = './src-tauri/target/release/bundle';
+// 优先找 msi，其次找 nsis (exe)
+const assetPath = findBundleFile(bundleRoot, ['.msi.zip', '.msi', '.exe.zip', '.exe']);
 
-if (!assetFile) {
-  console.error('未找到安装包文件，请检查 bundleDir 路径。');
+if (!assetPath) {
+  console.error('未找到安装包文件，请检查编译产物目录。');
   process.exit(1);
 }
 
-const signature = getSignature(path.join(bundleDir, assetFile));
+const assetName = path.basename(assetPath);
+const sigPath = assetPath + '.sig';
+const signature = fs.existsSync(sigPath) ? fs.readFileSync(sigPath, 'utf-8').trim() : '';
 
 const updateData = {
   version: version,
-  notes: `Release v${version}`,
+  notes: `家庭进销存系统 v${version} 自动发布`,
   pub_date: new Date().toISOString(),
   platforms: {
     [platform]: {
       signature: signature,
-      url: `https://github.com/${owner}/${repo}/releases/download/v${version}/${assetFile}`
+      url: `https://github.com/${owner}/${repo}/releases/download/v${version}/${assetName}`
     }
   }
 };
 
 fs.writeFileSync('./latest.json', JSON.stringify(updateData, null, 2));
-console.log('成功生成 latest.json:');
-console.log(updateData);
+console.log(`成功生成 latest.json (版本: ${version}, 文件: ${assetName})`);

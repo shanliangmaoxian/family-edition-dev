@@ -45,7 +45,11 @@ jobs:
 
       - name: Get version from package.json
         id: get_version
-        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "APP_VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Build Tauri App
         id: tauri_build
@@ -55,10 +59,10 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: v__VERSION__ # 标签名会自动从 tauri.conf.json 读取
-          releaseName: "家庭进销存 v__VERSION__"
+          tagName: v${{ steps.get_version.outputs.VERSION }}
+          releaseName: "家庭进销存 v${{ steps.get_version.outputs.VERSION }}"
           releaseBody: "自动生成的发布版本。"
-          releaseDraft: false # 必须为 false 才能让 latest 链接生效
+          releaseDraft: false
           prerelease: false
 
       - name: Generate latest.json
@@ -71,7 +75,7 @@ jobs:
       - name: Upload latest.json to Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.get_version.outputs.version }}
+          tag_name: v${{ steps.get_version.outputs.VERSION }}
           files: latest.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
