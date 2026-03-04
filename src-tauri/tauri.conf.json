@@ -15,7 +15,7 @@
   "app": {
     "windows": [
       {
-        "title": "九月进销存 v0.1.4",
+        "title": "九月进销存 v0.1.5",
         "width": 1440,
         "height": 960,
         "resizable": true,
