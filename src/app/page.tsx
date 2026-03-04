@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useTransition } from 'react';
-import { searchProducts, addProduct, backupDatabase, checkForUpdates, recordBatchTransaction, getTransactionHistory, getBillDetails, deleteProduct, askConfirm, showMessage } from '@/lib/actions-client';
+import { searchProducts, addProduct, backupDatabase, checkForUpdates, recordBatchTransaction, getTransactionHistory, getBillDetails, deleteProduct, askConfirm, showMessage, exportInventoryToExcel } from '@/lib/actions-client';
 
 export default function Home() {
   const [mounted, setMounted] = useState(false);
@@ -94,6 +94,15 @@ export default function Home() {
     }
   };
 
+  const handleExportExcel = async () => {
+    const res = await exportInventoryToExcel();
+    if (res?.success) {
+      await showMessage(`📊 导出成功！可以用 Excel 直接打开：\n${res.path}`, '导出成功');
+    } else if (res) {
+      await showMessage(`❌ 导出失败：${res.message}`, '导出失败');
+    }
+  };
+
   if (!mounted) return null;
 
   return (
@@ -109,6 +118,7 @@ export default function Home() {
           </div>
         </div>
         <div className="flex gap-4 items-center">
+          <button onClick={handleExportExcel} className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg font-bold text-sm transition-all border border-white/5">📊 导出 Excel</button>
           <button onClick={handleBackup} className="text-sm opacity-80 hover:opacity-100">💾 数据备份</button>
         </div>
       </header>
@@ -218,7 +228,7 @@ export default function Home() {
                 <div className="mt-2 flex gap-4">
                   <input 
                     placeholder={showOrderModal === 'in' ? '请输入供应商名称或备注...' : '请输入客户名称或备注...'}
-                    className="bg-white/20 border border-white/10 rounded-xl px-4 py-2 w-96 outline-none focus:bg-white/30 transition-all placeholder:text-white/50"
+                    className="bg-white/20 border border-white/10 rounded-xl px-4 py-2 w-96 outline-none focus:bg-white/30 transition-all placeholder:text-white/50 text-xl"
                     value={orderRemark}
                     onChange={(e) => setOrderRemark(e.target.value)}
                   />
@@ -303,9 +313,9 @@ export default function Home() {
                   <button 
                     disabled={orderCart.length === 0 || isPending}
                     onClick={submitOrder}
-                    className={`px-12 py-6 rounded-3xl font-black text-2xl shadow-2xl transition-all active:scale-95 ${showOrderModal === 'in' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-orange-600 hover:bg-orange-700'} text-white disabled:bg-slate-200 disabled:shadow-none`}
+                    className={`px-12 py-6 rounded-3xl font-black text-2xl shadow-2xl transition-all active:scale-95 ${showOrderModal === 'in' ? 'bg-blue-600' : 'bg-orange-600'} text-white disabled:bg-slate-200 disabled:shadow-none`}
                   >
-                    {isPending ? '提交中...' : '立即确认过账 ➔'}
+                    {isPending ? '提交中...' : showOrderModal === 'in' ? '确认入库' : '确认出库'}
                   </button>
                 </div>
               </div>

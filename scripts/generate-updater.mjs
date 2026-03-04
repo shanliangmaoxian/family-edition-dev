@@ -35,7 +35,7 @@ const signature = fs.existsSync(sigPath) ? fs.readFileSync(sigPath, 'utf-8').tri
 
 const updateData = {
   version: version,
-  notes: `家庭进销存系统 v${version} 自动发布`,
+  notes: `九月进销存系统 v${version} 自动发布`,
   pub_date: new Date().toISOString(),
   platforms: {
     [platform]: {

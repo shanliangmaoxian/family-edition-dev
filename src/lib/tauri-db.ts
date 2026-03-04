@@ -109,6 +109,23 @@ export async function getBillDetails(billNo: string) {
   `, [billNo]);
 }
 
+// --- 导出完整库存数据 ---
+export async function getAllInventoryForExport() {
+  const conn = await getTauriDB();
+  return conn.select<any[]>(`
+    SELECT 
+      category as '分类', 
+      name as '商品名称', 
+      spec as '规格', 
+      unit as '单位', 
+      stock as '当前库存', 
+      price as '参考单价',
+      (stock * price) as '库存总市值'
+    FROM products 
+    ORDER BY category ASC, name ASC
+  `);
+}
+
 export async function deleteProduct(id: number) {
   const conn = await getTauriDB();
   const transactions = await conn.select<any[]>('SELECT id FROM transactions WHERE product_id = ? LIMIT 1', [id]);

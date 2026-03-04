@@ -60,7 +60,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: v${{ steps.get_version.outputs.VERSION }}
-          releaseName: "家庭进销存 v${{ steps.get_version.outputs.VERSION }}"
+          releaseName: "九月进销存 v${{ steps.get_version.outputs.VERSION }}"
           releaseBody: "自动生成的发布版本。"
           releaseDraft: false
           prerelease: false

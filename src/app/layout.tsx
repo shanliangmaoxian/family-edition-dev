@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "家庭进销存系统 - 极简离线版",
+  title: "九月进销存系统 - 极简离线版",
   description: "专为家庭成员设计的极简离线库存管理系统",
 };
 

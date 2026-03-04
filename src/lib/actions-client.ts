@@ -17,6 +17,35 @@ export const getBillDetails = async (b: string) => isTauri ? tauriDb.getBillDeta
 export const deleteProduct = async (id: number) => isTauri ? tauriDb.deleteProduct(id) : null;
 export const addProduct = async (p: any) => isTauri ? tauriDb.addProduct(p) : null;
 
+// --- 导出 CSV (Excel 可读) ---
+export async function exportInventoryToExcel() {
+  if (!isTauri) return;
+  try {
+    const data = await tauriDb.getAllInventoryForExport();
+    if (!data || data.length === 0) throw new Error('没有可导出的数据');
+
+    // 1. 构建 CSV 字符串 (带 BOM 头以支持 Excel 中文)
+    const headers = Object.keys(data[0]).join(',');
+    const rows = data.map(row => 
+      Object.values(row).map(val => `"${val}"`).join(',')
+    ).join('\n');
+    const csvContent = '\uFEFF' + headers + '\n' + rows;
+
+    // 2. 选择保存路径
+    const filePath = await save({
+      filters: [{ name: 'Excel CSV', extensions: ['csv'] }],
+      defaultPath: `九月进销存_库存清单_${new Date().toLocaleDateString().replace(/\//g, '-')}.csv`
+    });
+
+    if (filePath) {
+      await writeFile(filePath, new TextEncoder().encode(csvContent));
+      return { success: true, path: filePath };
+    }
+  } catch (error: any) {
+    return { success: false, message: error.message };
+  }
+}
+
 // --- 对话框辅助 ---
 export async function askConfirm(messageStr: string, title: string = '确认') {
   if (!isTauri) return window.confirm(messageStr);
@@ -38,8 +67,15 @@ export async function backupDatabase() {
     });
 
     if (filePath) {
+      // 显式读取原始数据库
       const dbContent = await readFile('inventory.db', { baseDir: BaseDirectory.AppLocalData });
+      
+      if (!dbContent || dbContent.length === 0) {
+        throw new Error('数据库文件为空，请先添加一些数据再备份。');
+      }
+
       await writeFile(filePath, dbContent);
+      console.log(`备份成功，文件大小: ${dbContent.length} 字节`);
       return { success: true, path: filePath };
     }
     return { success: false, message: '用户取消了备份' };

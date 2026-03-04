@@ -1,4 +1,4 @@
-# 家庭进销存系统 (Family Inventory System) - GEMINI Context
+# 九月进销存系统 (September Inventory System) - GEMINI Context
 
 ## Project Overview
 A fully offline, desktop-based inventory management system designed for family members. It features large fonts, a minimalist UI, and robust local data persistence using SQLite.
