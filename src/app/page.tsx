@@ -18,6 +18,7 @@ export default function Home() {
   
   // 订单录入中的“清单”
   const [orderCart, setOrderCart] = useState<any[]>([]);
+  const [orderRemark, setOrderRemark] = useState('');
 
   useEffect(() => {
     setMounted(true);
@@ -46,15 +47,23 @@ export default function Home() {
   const submitOrder = async () => {
     if (orderCart.length === 0 || !showOrderModal) return;
     
+    // 强制检查备注（客户/供应商名）
+    if (!orderRemark.trim()) {
+      await showMessage(`请先输入${showOrderModal === 'in' ? '供应商名称' : '客户名称'}或备注信息！`, '提示');
+      return;
+    }
+    
     startTransition(async () => {
       const billNo = await recordBatchTransaction({
         type: showOrderModal,
+        remark: orderRemark,
         items: orderCart.map(i => ({ productId: i.id, quantity: i.qty, price: i.curPrice }))
       });
       
-      await showMessage(`✅ 单据已生成！\n单号：${billNo}\n包含 ${orderCart.length} 项商品。`, '过账成功');
+      await showMessage(`✅ 单据已生成！\n单号：${billNo}\n客户/备注：${orderRemark || '无'}`, '过账成功');
       setShowOrderModal(null);
       setOrderCart([]);
+      setOrderRemark('');
       refreshData();
     });
   };
@@ -112,7 +121,7 @@ export default function Home() {
             <h2 className="text-2xl font-black text-slate-800 flex items-center gap-2">📦 当前实时库存清单</h2>
             <div className="flex gap-2">
               <input 
-                placeholder="快速筛选..." 
+                placeholder="快速筛选名称/分类..." 
                 className="px-4 py-2 bg-white border rounded-xl outline-none focus:border-blue-500 w-64"
                 value={query}
                 onChange={(e) => handleSearch(e.target.value)}
@@ -123,9 +132,9 @@ export default function Home() {
           
           <div className="flex-1 overflow-y-auto">
             <table className="w-full border-collapse">
-              <thead className="sticky top-0 bg-white/90 backdrop-blur z-10 shadow-sm text-slate-400 text-sm">
+              <thead className="sticky top-0 bg-white/90 backdrop-blur z-10 shadow-sm text-slate-400 text-sm border-b">
                 <tr>
-                  <th className="p-6 text-left font-bold">商品名称 / 规格</th>
+                  <th className="p-6 text-left font-bold">商品分类 / 名称 / 规格</th>
                   <th className="p-6 text-right font-bold">参考价</th>
                   <th className="p-6 text-right font-bold text-slate-800">当前库存</th>
                 </tr>
@@ -136,6 +145,9 @@ export default function Home() {
                     <td className="p-6 relative group">
                       <div className="flex justify-between items-center pr-10">
                         <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="bg-blue-50 text-blue-500 text-[10px] px-2 py-0.5 rounded-md font-black uppercase">{p.category}</span>
+                          </div>
                           <div className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-3">
                             {p.name} 
                             <span className="bg-slate-100 text-slate-400 px-2 py-0.5 rounded text-sm font-bold border border-slate-100">
@@ -184,9 +196,10 @@ export default function Home() {
                   </span>
                   <span className="text-[10px] text-white/30">{h.time}</span>
                 </div>
-                <div className="font-mono text-sm text-white/60 mb-2 truncate">{h.bill_no}</div>
-                <div className="flex justify-between items-end">
-                  <div className="text-xs text-white/40">{h.item_count} 件商品</div>
+                <div className="font-bold text-sm text-white/90 truncate mb-1">{h.remark || '无备注'}</div>
+                <div className="font-mono text-[10px] text-white/30 mb-2 truncate">{h.bill_no}</div>
+                <div className="flex justify-between items-end border-t border-white/5 pt-2">
+                  <div className="text-[10px] text-white/40">{h.item_count} 件商品</div>
                   <div className="text-xl font-bold text-white/90">¥ {h.total_amount.toFixed(2)}</div>
                 </div>
               </div>
@@ -195,20 +208,26 @@ export default function Home() {
         </section>
       </div>
 
-      {/* --- 弹窗：录入出入库单 (多选模式) --- */}
+      {/* --- 弹窗：录入出入库单 --- */}
       {showOrderModal && (
         <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md flex items-center justify-center p-8 z-[100] animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-6xl h-full max-h-[90vh] rounded-[40px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in duration-300">
             <div className={`p-8 flex justify-between items-center text-white ${showOrderModal === 'in' ? 'bg-blue-600' : 'bg-orange-600'}`}>
               <div>
                 <h2 className="text-4xl font-black italic">生成 {showOrderModal === 'in' ? '采购入库单' : '销售出库单'}</h2>
-                <p className="opacity-70 font-bold mt-1 uppercase tracking-widest text-sm">Create {showOrderModal}bound Stock Order</p>
+                <div className="mt-2 flex gap-4">
+                  <input 
+                    placeholder={showOrderModal === 'in' ? '请输入供应商名称或备注...' : '请输入客户名称或备注...'}
+                    className="bg-white/20 border border-white/10 rounded-xl px-4 py-2 w-96 outline-none focus:bg-white/30 transition-all placeholder:text-white/50"
+                    value={orderRemark}
+                    onChange={(e) => setOrderRemark(e.target.value)}
+                  />
+                </div>
               </div>
               <button onClick={() => setShowOrderModal(null)} className="bg-black/20 hover:bg-black/40 w-12 h-12 rounded-full flex items-center justify-center text-2xl">✕</button>
             </div>
             
             <div className="flex-1 flex overflow-hidden">
-              {/* 商品点选区 */}
               <div className="w-1/2 border-r flex flex-col bg-slate-50">
                 <div className="p-6">
                   <input 
@@ -225,7 +244,10 @@ export default function Home() {
                       className={`p-4 rounded-2xl border flex justify-between items-center cursor-pointer transition-all ${orderCart.find(i => i.id === p.id) ? 'bg-blue-600 border-blue-600 text-white shadow-lg scale-95' : 'bg-white hover:border-blue-300'}`}
                     >
                       <div>
-                        <div className="font-bold text-xl">{p.name}</div>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-[9px] px-1 rounded ${orderCart.find(i => i.id === p.id) ? 'bg-white/20' : 'bg-slate-100'}`}>{p.category}</span>
+                          <div className="font-bold text-xl">{p.name}</div>
+                        </div>
                         <div className={`text-xs ${orderCart.find(i => i.id === p.id) ? 'text-white/60' : 'text-slate-400'}`}>规格: {p.spec} | 库存: {p.stock}</div>
                       </div>
                       <div className="font-mono">¥{p.price}</div>
@@ -234,7 +256,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* 单据填写区 */}
               <div className="w-1/2 flex flex-col bg-white shadow-inner">
                 <div className="flex-1 overflow-y-auto p-8 space-y-6">
                   {orderCart.length === 0 ? (
@@ -293,7 +314,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* --- 弹窗：新增商品资料 --- */}
+      {/* --- 弹窗：新增商品 --- */}
       {showAddProduct && (
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4 z-[101]">
           <div className="bg-white w-full max-w-lg rounded-[40px] p-10 shadow-2xl animate-in zoom-in duration-200">
@@ -304,22 +325,24 @@ export default function Home() {
               await addProduct({
                 name: f.get('name') as string,
                 spec: f.get('spec') as string,
+                category: f.get('category') as string,
                 unit: f.get('unit') as string,
-                price: parseFloat(f.get('price') as string),
-                initialStock: parseFloat(f.get('stock') as string)
+                price: parseFloat(f.get('price') as string || '0'),
+                initialStock: parseFloat(f.get('stock') as string || '0')
               });
               setShowAddProduct(false);
               refreshData();
             }} className="space-y-6">
-              <input name="name" required placeholder="商品名称" className="w-full p-5 bg-slate-50 rounded-2xl border-2 border-slate-100 text-2xl outline-none focus:border-blue-400" />
+              <input name="name" required placeholder="商品名称 (如：三角带 A-1000)" className="w-full p-5 bg-slate-50 rounded-2xl border-2 border-slate-100 text-2xl outline-none focus:border-blue-400" />
               <div className="grid grid-cols-2 gap-4">
-                <input name="spec" placeholder="规格 (如10kg/袋)" className="w-full p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 text-xl outline-none" />
-                <input name="unit" defaultValue="个" placeholder="单位" className="w-full p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 text-xl outline-none" />
+                <input name="category" defaultValue="三角带" placeholder="分类 (如：托辊、三角带)" className="w-full p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 text-xl outline-none focus:border-blue-400" />
+                <input name="spec" placeholder="规格 (如：A型)" className="w-full p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 text-xl outline-none focus:border-blue-400" />
               </div>
               <div className="grid grid-cols-2 gap-4">
+                <input name="unit" defaultValue="条" placeholder="单位" className="w-full p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 text-xl outline-none" />
                 <input name="price" type="number" step="0.01" placeholder="默认单价" className="w-full p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 text-xl outline-none" />
-                <input name="stock" type="number" step="0.01" placeholder="初始库存" className="w-full p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 text-xl outline-none" />
               </div>
+              <input name="stock" type="number" step="0.01" placeholder="初始库存" className="w-full p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 text-xl outline-none" />
               <div className="flex gap-4 pt-6">
                 <button type="button" onClick={() => setShowAddProduct(false)} className="flex-1 py-5 rounded-2xl font-bold text-slate-400">取消</button>
                 <button type="submit" className="flex-1 py-5 rounded-2xl bg-slate-900 text-white font-bold shadow-lg">确认入库</button>
@@ -329,15 +352,15 @@ export default function Home() {
         </div>
       )}
 
-      {/* --- 弹窗：查看单据详情 --- */}
+      {/* --- 弹窗：单据详情 --- */}
       {selectedBill && (
         <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md flex items-center justify-center p-8 z-[120]">
           <div className="bg-white w-full max-w-2xl rounded-[40px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in duration-200">
             <div className={`p-8 text-white flex justify-between items-start ${selectedBill.type === 'in' ? 'bg-blue-600' : 'bg-orange-600'}`}>
               <div>
                 <h2 className="text-3xl font-black italic">{selectedBill.type === 'in' ? '📥 入库单详情' : '📤 出库单详情'}</h2>
-                <div className="mt-2 text-white/70 font-mono text-sm">{selectedBill.bill_no}</div>
-                <div className="mt-1 text-white/50 text-xs">{selectedBill.time}</div>
+                <div className="mt-2 font-bold text-xl">{selectedBill.remark || '无备注'}</div>
+                <div className="mt-2 text-white/50 font-mono text-xs">{selectedBill.bill_no} | {selectedBill.time}</div>
               </div>
               <button onClick={() => setSelectedBill(null)} className="bg-black/20 hover:bg-black/40 w-10 h-10 rounded-full flex items-center justify-center">✕</button>
             </div>
@@ -347,6 +370,9 @@ export default function Home() {
                 {billItems.map((item, i) => (
                   <div key={i} className="flex justify-between items-center border-b pb-4 border-slate-50 last:border-0">
                     <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-[9px] bg-slate-100 text-slate-400 px-1 rounded">{item.category}</span>
+                      </div>
                       <div className="text-xl font-bold text-slate-800 flex items-center gap-2">
                         {item.name} 
                         <span className="text-slate-400 text-sm font-normal">[{item.spec || '无'}]</span>
@@ -362,8 +388,11 @@ export default function Home() {
             </div>
 
             <div className="p-8 bg-slate-50 border-t flex justify-between items-center">
-              <div className="text-slate-400 font-bold uppercase text-xs tracking-widest">单据合计金额</div>
-              <div className="text-4xl font-black text-slate-900">¥ {selectedBill.total_amount.toFixed(2)}</div>
+              <div>
+                <div className="text-slate-400 font-bold uppercase text-xs tracking-widest">单据合计金额</div>
+                <div className="text-4xl font-black text-slate-900">¥ {selectedBill.total_amount.toFixed(2)}</div>
+              </div>
+              <button onClick={() => setSelectedBill(null)} className="bg-slate-900 text-white px-8 py-3 rounded-xl font-bold">关闭窗口</button>
             </div>
           </div>
         </div>

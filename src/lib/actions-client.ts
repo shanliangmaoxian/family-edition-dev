@@ -11,7 +11,6 @@ import { relaunch } from '@tauri-apps/plugin-process';
 
 // 统一导出
 export const searchProducts = async (q: string) => isTauri ? tauriDb.searchProducts(q) : [];
-export const recordTransaction = async (t: any) => isTauri ? tauriDb.recordTransaction(t) : null;
 export const recordBatchTransaction = async (t: any) => isTauri ? tauriDb.recordBatchTransaction(t) : null;
 export const getTransactionHistory = async () => isTauri ? tauriDb.getTransactionHistory() : [];
 export const getBillDetails = async (b: string) => isTauri ? tauriDb.getBillDetails(b) : [];
