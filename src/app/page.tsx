@@ -4,22 +4,33 @@ import { useState, useEffect, useTransition } from 'react';
 import { searchProducts, recordTransaction, addProduct, backupDatabase, checkForUpdates } from '@/lib/actions-client';
 
 export default function Home() {
+  const [mounted, setMounted] = useState(false);
   const [query, setQuery] = useState('');
   const [products, setProducts] = useState<any[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [isPending, startTransition] = useTransition();
   const [showAddForm, setShowAddForm] = useState(false);
 
-  // 检查更新
+  // 初始化检查
   useEffect(() => {
-    checkForUpdates();
+    setMounted(true);
+    // 延迟 100ms 搜索，确保 Tauri 环境已就绪
+    const timer = setTimeout(() => {
+      handleSearch('');
+      checkForUpdates();
+    }, 100);
+    return () => clearTimeout(timer);
   }, []);
 
   const handleSearch = async (val: string) => {
     setQuery(val);
-    const results = await searchProducts(val);
-    setProducts(results);
+    if (typeof window !== 'undefined') {
+      const results = await searchProducts(val);
+      setProducts(results || []);
+    }
   };
+
+  if (!mounted) return <div className="min-h-screen bg-gray-50 flex items-center justify-center font-bold">载入中...</div>;
 
   const handleTransaction = async (type: 'in' | 'out', e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();

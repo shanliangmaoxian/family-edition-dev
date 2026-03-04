@@ -7,8 +7,15 @@
   ],
   "permissions": [
     "core:default",
-    "sql:default",
-    "fs:default",
-    "dialog:default"
+    "sql:allow-load",
+    "sql:allow-execute",
+    "sql:allow-select",
+    "fs:allow-read-file",
+    "fs:allow-write-file",
+    "fs:allow-applocaldata-read-recursive",
+    "fs:allow-applocaldata-write-recursive",
+    "dialog:allow-save",
+    "process:allow-restart",
+    "updater:default"
   ]
 }

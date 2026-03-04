@@ -1,18 +1,22 @@
 'use client';
 
+// 检查是否在浏览器且在 Tauri 环境中
+const isTauri = typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__ !== undefined;
+
 import * as tauriDb from './tauri-db';
 import { save } from '@tauri-apps/plugin-dialog';
-import { writeFile, BaseDirectory, readBinaryFile } from '@tauri-apps/plugin-fs';
+import { writeFile, BaseDirectory, readFile } from '@tauri-apps/plugin-fs';
 import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 
 // 统一导出与之前一致的接口名，但内部实现换成 Tauri 调用
-export const searchProducts = tauriDb.searchProducts;
-export const recordTransaction = tauriDb.recordTransaction;
-export const addProduct = tauriDb.addProduct;
+export const searchProducts = async (q: string) => isTauri ? tauriDb.searchProducts(q) : [];
+export const recordTransaction = async (t: any) => isTauri ? tauriDb.recordTransaction(t) : null;
+export const addProduct = async (p: any) => isTauri ? tauriDb.addProduct(p) : null;
 
 // --- 桌面版备份实现 ---
 export async function backupDatabase() {
+  if (!isTauri) return { success: false, message: '非桌面环境无法备份' };
   try {
     const filePath = await save({
       filters: [{ name: 'SQLite Database', extensions: ['db'] }],
@@ -21,7 +25,7 @@ export async function backupDatabase() {
 
     if (filePath) {
       // 在 Tauri 中，数据库默认存在应用数据目录 (AppLocalData)
-      const dbContent = await readBinaryFile('inventory.db', { baseDir: BaseDirectory.AppLocalData });
+      const dbContent = await readFile('inventory.db', { baseDir: BaseDirectory.AppLocalData });
       await writeFile(filePath, dbContent);
       return { success: true, path: filePath };
     }
@@ -33,6 +37,7 @@ export async function backupDatabase() {
 
 // --- 在线更新实现 ---
 export async function checkForUpdates() {
+  if (!isTauri) return { hasUpdate: false };
   try {
     const update = await check();
     if (update) {
