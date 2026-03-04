@@ -21,8 +21,8 @@ function findBundleFile(dir, extensions) {
 }
 
 const bundleRoot = './src-tauri/target/release/bundle';
-// 优先找 msi，其次找 nsis (exe)
-const assetPath = findBundleFile(bundleRoot, ['.msi.zip', '.msi', '.exe.zip', '.exe']);
+// 优先找 exe (nsis)，其次才是 msi 和 zip
+const assetPath = findBundleFile(bundleRoot, ['.exe', '.exe.zip', '.msi.zip', '.msi']);
 
 if (!assetPath) {
   console.error('未找到安装包文件，请检查编译产物目录。');
