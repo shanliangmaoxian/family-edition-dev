@@ -46,8 +46,8 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 ## 提交部署
 
 ```shell
-❯ git add .
-❯ git commit -m "feat: 集成 tauri 和自动更新"
-❯ git tag v0.0.2
-❯ git push origin main --tags
+git add .
+git commit -m "feat: 集成 tauri 和自动更新"
+git tag v0.0.2
+git push origin main --tags
 ```
