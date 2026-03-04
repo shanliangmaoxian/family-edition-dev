@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "family-edition",
-  "version": "0.1.2",
+  "productName": "九月进销存",
+  "version": "0.2.2",
   "identifier": "com.family.inventory",
   "plugins": {
     "sql": {},
@@ -15,9 +15,9 @@
   "app": {
     "windows": [
       {
-        "title": "家庭进销存系统",
-        "width": 800,
-        "height": 600,
+        "title": "九月进销存 v0.2.2",
+        "width": 1440,
+        "height": 960,
         "resizable": true,
         "fullscreen": false
       }

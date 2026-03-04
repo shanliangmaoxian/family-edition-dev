@@ -1,226 +1,374 @@
 'use client';
 
 import { useState, useEffect, useTransition } from 'react';
-import { searchProducts, recordTransaction, addProduct, backupDatabase, checkForUpdates } from '@/lib/actions-client';
+import { searchProducts, addProduct, backupDatabase, checkForUpdates, recordBatchTransaction, getTransactionHistory, getBillDetails, deleteProduct, askConfirm, showMessage } from '@/lib/actions-client';
 
 export default function Home() {
   const [mounted, setMounted] = useState(false);
   const [query, setQuery] = useState('');
   const [products, setProducts] = useState<any[]>([]);
-  const [selectedProduct, setSelectedProduct] = useState<any>(null);
+  const [history, setHistory] = useState<any[]>([]);
   const [isPending, startTransition] = useTransition();
-  const [showAddForm, setShowAddForm] = useState(false);
+  
+  // 弹窗状态
+  const [showAddProduct, setShowAddProduct] = useState(false);
+  const [showOrderModal, setShowOrderModal] = useState<'in' | 'out' | null>(null);
+  const [selectedBill, setSelectedBill] = useState<any>(null);
+  const [billItems, setBillItems] = useState<any[]>([]);
+  
+  // 订单录入中的“清单”
+  const [orderCart, setOrderCart] = useState<any[]>([]);
 
-  // 初始化检查
   useEffect(() => {
     setMounted(true);
-    // 延迟 100ms 搜索，确保 Tauri 环境已就绪
-    const timer = setTimeout(() => {
-      handleSearch('');
-      checkForUpdates();
-    }, 100);
-    return () => clearTimeout(timer);
+    refreshData();
+    checkForUpdates();
   }, []);
+
+  const refreshData = async () => {
+    const p = await searchProducts('');
+    const h = await getTransactionHistory();
+    setProducts(p || []);
+    setHistory(h || []);
+  };
 
   const handleSearch = async (val: string) => {
     setQuery(val);
-    if (typeof window !== 'undefined') {
-      const results = await searchProducts(val);
-      setProducts(results || []);
+    const results = await searchProducts(val);
+    setProducts(results || []);
+  };
+
+  const addToOrder = (p: any) => {
+    if (orderCart.find(i => i.id === p.id)) return;
+    setOrderCart([...orderCart, { ...p, qty: 1, curPrice: p.price }]);
+  };
+
+  const submitOrder = async () => {
+    if (orderCart.length === 0 || !showOrderModal) return;
+    
+    startTransition(async () => {
+      const billNo = await recordBatchTransaction({
+        type: showOrderModal,
+        items: orderCart.map(i => ({ productId: i.id, quantity: i.qty, price: i.curPrice }))
+      });
+      
+      await showMessage(`✅ 单据已生成！\n单号：${billNo}\n包含 ${orderCart.length} 项商品。`, '过账成功');
+      setShowOrderModal(null);
+      setOrderCart([]);
+      refreshData();
+    });
+  };
+
+  const handleDeleteProduct = async (p: any) => {
+    const ok = await askConfirm(`确定要彻底删除 [${p.name}] 吗？`, '删除商品确认');
+    if (!ok) return;
+    try {
+      const res = await deleteProduct(p.id);
+      if (res) refreshData();
+    } catch (e: any) {
+      await showMessage(`无法删除：${e.message || '该商品可能有关联单据。'}`, '删除失败');
     }
   };
 
-  if (!mounted) return <div className="min-h-screen bg-gray-50 flex items-center justify-center font-bold">载入中...</div>;
-
-  const handleTransaction = async (type: 'in' | 'out', e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    const quantity = parseFloat(formData.get('quantity') as string);
-    const price = parseFloat(formData.get('price') as string);
-
-    startTransition(async () => {
-      await recordTransaction({
-        productId: selectedProduct.id,
-        type,
-        quantity,
-        price,
-        remark: ''
-      });
-      setSelectedProduct(null);
-      handleSearch(query);
-    });
-  };
-
-  const handleAddProduct = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    startTransition(async () => {
-      await addProduct({
-        name: formData.get('name') as string,
-        spec: formData.get('spec') as string,
-        unit: formData.get('unit') as string,
-        price: parseFloat(formData.get('price') as string || '0'),
-        initialStock: parseFloat(formData.get('stock') as string || '0'),
-      });
-      setShowAddForm(false);
-      handleSearch(query);
-    });
+  const handleBillClick = async (bill: any) => {
+    const details = await getBillDetails(bill.bill_no);
+    setBillItems(details || []);
+    setSelectedBill(bill);
   };
 
   const handleBackup = async () => {
     const res = await backupDatabase();
     if (res.success) {
-      alert(`✅ 备份成功！已保存到桌面：\n${res.path}`);
+      await showMessage(`✅ 备份成功！已保存到：\n${res.path}`, '备份成功');
     } else {
-      alert(`❌ 备份失败：${res.message}`);
+      await showMessage(`❌ 备份失败：${res.message}`, '备份失败');
     }
   };
 
+  if (!mounted) return null;
+
   return (
-    <main className="min-h-screen bg-gray-50 p-4 md:p-8 text-xl">
-      <div className="max-w-4xl mx-auto space-y-8">
+    <main className="min-h-screen bg-slate-100 flex flex-col font-sans">
+      
+      {/* 顶部导航 */}
+      <header className="bg-blue-700 text-white px-8 py-4 flex justify-between items-center shadow-lg">
+        <div className="flex items-center gap-6">
+          <h1 className="text-3xl font-black tracking-tighter italic">九月进销存 <span className="text-xs font-normal opacity-60 not-italic ml-2">v0.2.2</span></h1>
+          <div className="flex gap-2">
+            <button onClick={() => setShowOrderModal('in')} className="bg-white/20 hover:bg-white/30 px-6 py-2 rounded-xl font-bold transition-all border border-white/10">➕ 新增入库单</button>
+            <button onClick={() => setShowOrderModal('out')} className="bg-orange-500 hover:bg-orange-600 px-6 py-2 rounded-xl font-bold transition-all shadow-md">📤 新增出库单</button>
+          </div>
+        </div>
+        <div className="flex gap-4 items-center">
+          <button onClick={handleBackup} className="text-sm opacity-80 hover:opacity-100">💾 数据备份</button>
+        </div>
+      </header>
+
+      <div className="flex-1 flex p-6 gap-6 overflow-hidden">
         
-        {/* Header */}
-        <div className="flex justify-between items-center bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-          <h1 className="text-4xl font-bold text-blue-600">家庭进销存</h1>
-          <button 
-            onClick={handleBackup}
-            className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-xl font-bold shadow-lg transition-all active:scale-95"
-          >
-            💾 一键备份到桌面
-          </button>
-        </div>
+        {/* 左侧：实时库存看板 */}
+        <section className="flex-[2] bg-white rounded-3xl shadow-xl border border-slate-200 flex flex-col overflow-hidden">
+          <div className="p-6 border-b flex justify-between items-center bg-slate-50/50">
+            <h2 className="text-2xl font-black text-slate-800 flex items-center gap-2">📦 当前实时库存清单</h2>
+            <div className="flex gap-2">
+              <input 
+                placeholder="快速筛选..." 
+                className="px-4 py-2 bg-white border rounded-xl outline-none focus:border-blue-500 w-64"
+                value={query}
+                onChange={(e) => handleSearch(e.target.value)}
+              />
+              <button onClick={() => setShowAddProduct(true)} className="bg-blue-600 text-white px-4 py-2 rounded-xl font-bold text-sm">+ 新增品项</button>
+            </div>
+          </div>
+          
+          <div className="flex-1 overflow-y-auto">
+            <table className="w-full border-collapse">
+              <thead className="sticky top-0 bg-white/90 backdrop-blur z-10 shadow-sm text-slate-400 text-sm">
+                <tr>
+                  <th className="p-6 text-left font-bold">商品名称 / 规格</th>
+                  <th className="p-6 text-right font-bold">参考价</th>
+                  <th className="p-6 text-right font-bold text-slate-800">当前库存</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {products.map(p => (
+                  <tr key={p.id} className="hover:bg-blue-50/30 transition-colors group">
+                    <td className="p-6 relative group">
+                      <div className="flex justify-between items-center pr-10">
+                        <div>
+                          <div className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-3">
+                            {p.name} 
+                            <span className="bg-slate-100 text-slate-400 px-2 py-0.5 rounded text-sm font-bold border border-slate-100">
+                              {p.spec || '无规格'}
+                            </span>
+                          </div>
+                          <div className="text-slate-300 text-sm mt-0.5">单位: {p.unit}</div>
+                        </div>
+                        <button 
+                          onClick={() => handleDeleteProduct(p)}
+                          className="opacity-0 group-hover:opacity-100 p-2 text-slate-200 hover:text-red-500 transition-all text-sm font-bold bg-slate-50 rounded-lg shadow-sm border"
+                          title="删除商品"
+                        >
+                          🗑️ 删除
+                        </button>
+                      </div>
+                    </td>
+                    <td className="p-6 text-right text-slate-400 text-xl">¥ {p.price.toFixed(2)}</td>
+                    <td className="p-6 text-right">
+                      <div className={`text-4xl font-black tracking-tighter ${p.stock <= 2 ? 'text-red-500' : 'text-blue-700'}`}>
+                        {p.stock} <span className="text-sm font-normal text-slate-400">{p.unit}</span>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
 
-        {/* Search & Actions */}
-        <div className="flex flex-col md:flex-row gap-4">
-          <input
-            type="text"
-            placeholder="🔍 搜索名称或规格..."
-            className="flex-1 p-5 rounded-2xl border-2 border-gray-200 focus:border-blue-400 outline-none text-2xl shadow-sm"
-            value={query}
-            onChange={(e) => handleSearch(e.target.value)}
-          />
-          <button 
-            onClick={() => setShowAddForm(true)}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-5 rounded-2xl font-bold text-2xl shadow-lg transition-all active:scale-95"
-          >
-            ➕ 新增商品
-          </button>
-        </div>
-
-        {/* Product List */}
-        <div className="grid gap-4">
-          {products.map((p) => (
-            <div 
-              key={p.id} 
-              className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col md:flex-row justify-between items-center gap-4 hover:border-blue-200 transition-colors"
-            >
-              <div className="flex-1">
-                <div className="font-bold text-3xl text-gray-800">{p.name}</div>
-                <div className="text-gray-500 mt-1">
-                  规格: <span className="text-gray-700">{p.spec || '无'}</span> | 单位: {p.unit}
+        {/* 右侧：单据历史记录 */}
+        <section className="flex-1 bg-slate-800 rounded-3xl shadow-2xl flex flex-col overflow-hidden text-white">
+          <div className="p-6 border-b border-white/10 bg-white/5">
+            <h2 className="text-xl font-black flex items-center gap-2 italic">📝 最近出入库单据</h2>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            {history.map(h => (
+              <div 
+                key={h.bill_no} 
+                onClick={() => handleBillClick(h)}
+                className="bg-white/5 border border-white/10 p-4 rounded-2xl hover:bg-white/15 transition-all group cursor-pointer active:scale-95"
+              >
+                <div className="flex justify-between items-start mb-2">
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${h.type === 'in' ? 'bg-green-500/20 text-green-400' : 'bg-orange-500/20 text-orange-400'}`}>
+                    {h.type === 'in' ? '采购入库' : '销售出库'}
+                  </span>
+                  <span className="text-[10px] text-white/30">{h.time}</span>
+                </div>
+                <div className="font-mono text-sm text-white/60 mb-2 truncate">{h.bill_no}</div>
+                <div className="flex justify-between items-end">
+                  <div className="text-xs text-white/40">{h.item_count} 件商品</div>
+                  <div className="text-xl font-bold text-white/90">¥ {h.total_amount.toFixed(2)}</div>
                 </div>
               </div>
-              
-              <div className="text-right flex items-center gap-8">
-                <div className="text-center">
-                  <div className="text-gray-400 text-sm uppercase">当前库存</div>
-                  <div className={`text-4xl font-black ${p.stock <= 2 ? 'text-red-500' : 'text-blue-600'}`}>
-                    {p.stock} <span className="text-lg font-normal text-gray-400">{p.unit}</span>
-                  </div>
+            ))}
+          </div>
+        </section>
+      </div>
+
+      {/* --- 弹窗：录入出入库单 (多选模式) --- */}
+      {showOrderModal && (
+        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md flex items-center justify-center p-8 z-[100] animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-6xl h-full max-h-[90vh] rounded-[40px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in duration-300">
+            <div className={`p-8 flex justify-between items-center text-white ${showOrderModal === 'in' ? 'bg-blue-600' : 'bg-orange-600'}`}>
+              <div>
+                <h2 className="text-4xl font-black italic">生成 {showOrderModal === 'in' ? '采购入库单' : '销售出库单'}</h2>
+                <p className="opacity-70 font-bold mt-1 uppercase tracking-widest text-sm">Create {showOrderModal}bound Stock Order</p>
+              </div>
+              <button onClick={() => setShowOrderModal(null)} className="bg-black/20 hover:bg-black/40 w-12 h-12 rounded-full flex items-center justify-center text-2xl">✕</button>
+            </div>
+            
+            <div className="flex-1 flex overflow-hidden">
+              {/* 商品点选区 */}
+              <div className="w-1/2 border-r flex flex-col bg-slate-50">
+                <div className="p-6">
+                  <input 
+                    placeholder="🔍 搜索需要加入单据的商品..." 
+                    className="w-full p-4 rounded-2xl border-2 border-slate-200 outline-none focus:border-blue-500 text-xl shadow-sm"
+                    onChange={(e) => handleSearch(e.target.value)}
+                  />
+                </div>
+                <div className="flex-1 overflow-y-auto p-6 pt-0 space-y-3">
+                  {products.map(p => (
+                    <div 
+                      key={p.id} 
+                      onClick={() => addToOrder(p)}
+                      className={`p-4 rounded-2xl border flex justify-between items-center cursor-pointer transition-all ${orderCart.find(i => i.id === p.id) ? 'bg-blue-600 border-blue-600 text-white shadow-lg scale-95' : 'bg-white hover:border-blue-300'}`}
+                    >
+                      <div>
+                        <div className="font-bold text-xl">{p.name}</div>
+                        <div className={`text-xs ${orderCart.find(i => i.id === p.id) ? 'text-white/60' : 'text-slate-400'}`}>规格: {p.spec} | 库存: {p.stock}</div>
+                      </div>
+                      <div className="font-mono">¥{p.price}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 单据填写区 */}
+              <div className="w-1/2 flex flex-col bg-white shadow-inner">
+                <div className="flex-1 overflow-y-auto p-8 space-y-6">
+                  {orderCart.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-slate-300 space-y-4">
+                      <div className="text-6xl italic opacity-20">EMPTY</div>
+                      <p className="font-bold">点击左侧商品加入单据</p>
+                    </div>
+                  ) : (
+                    orderCart.map((item, idx) => (
+                      <div key={item.id} className="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex flex-col gap-4">
+                        <div className="flex justify-between items-center">
+                          <span className="text-2xl font-black text-slate-800"><span className="text-slate-300 font-mono mr-2">{idx+1}.</span>{item.name}</span>
+                          <button onClick={() => setOrderCart(orderCart.filter(i => i.id !== item.id))} className="text-red-400 hover:text-red-600 font-bold">移除</button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-6">
+                          <div>
+                            <label className="text-xs font-bold text-slate-400 mb-2 block">数量 ({item.unit})</label>
+                            <input 
+                              type="number" 
+                              value={item.qty} 
+                              onChange={(e) => setOrderCart(orderCart.map(i => i.id === item.id ? {...i, qty: parseFloat(e.target.value) || 0} : i))}
+                              className="w-full p-4 rounded-2xl border-2 border-slate-100 text-3xl font-black text-blue-600 outline-none focus:border-blue-400 bg-white"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs font-bold text-slate-400 mb-2 block">{showOrderModal === 'in' ? '进货' : '出货'}单价 (元)</label>
+                            <input 
+                              type="number" 
+                              value={item.curPrice} 
+                              onChange={(e) => setOrderCart(orderCart.map(i => i.id === item.id ? {...i, curPrice: parseFloat(e.target.value) || 0} : i))}
+                              className="w-full p-4 rounded-2xl border-2 border-slate-100 text-3xl font-black text-slate-700 outline-none focus:border-blue-400 bg-white"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
                 
-                <div className="flex gap-2">
+                <div className="p-8 border-t bg-slate-50/50 flex justify-between items-center">
+                  <div>
+                    <div className="text-slate-400 font-bold text-xs uppercase tracking-widest">单据预估总额 (Total)</div>
+                    <div className="text-5xl font-black text-slate-900 tracking-tighter">¥ {orderCart.reduce((s, i) => s + (i.qty * i.curPrice), 0).toFixed(2)}</div>
+                  </div>
                   <button 
-                    onClick={() => setSelectedProduct({ ...p, mode: 'in' })}
-                    className="bg-orange-100 text-orange-600 hover:bg-orange-500 hover:text-white p-4 rounded-xl font-bold transition-colors"
+                    disabled={orderCart.length === 0 || isPending}
+                    onClick={submitOrder}
+                    className={`px-12 py-6 rounded-3xl font-black text-2xl shadow-2xl transition-all active:scale-95 ${showOrderModal === 'in' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-orange-600 hover:bg-orange-700'} text-white disabled:bg-slate-200 disabled:shadow-none`}
                   >
-                    📥 入库
-                  </button>
-                  <button 
-                    onClick={() => setSelectedProduct({ ...p, mode: 'out' })}
-                    className="bg-blue-100 text-blue-600 hover:bg-blue-600 hover:text-white p-4 rounded-xl font-bold transition-colors"
-                  >
-                    📤 出库
+                    {isPending ? '提交中...' : '立即确认过账 ➔'}
                   </button>
                 </div>
               </div>
             </div>
-          ))}
-          {products.length === 0 && (
-            <div className="text-center py-20 text-gray-400 italic">暂无商品，请点击“新增商品”</div>
-          )}
+          </div>
         </div>
+      )}
 
-        {/* In/Out Form Modal */}
-        {selectedProduct && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-            <div className="bg-white w-full max-w-lg rounded-3xl p-8 shadow-2xl animate-in fade-in zoom-in duration-200">
-              <h2 className="text-3xl font-bold mb-6 flex items-center gap-2">
-                {selectedProduct.mode === 'in' ? '📥 确认入库' : '📤 确认出库'}
-                <span className="text-blue-600">[{selectedProduct.name}]</span>
-              </h2>
-              <form onSubmit={(e) => handleTransaction(selectedProduct.mode, e)} className="space-y-6">
-                <div>
-                  <label className="block text-gray-500 mb-2">数量 ({selectedProduct.unit})</label>
-                  <input name="quantity" type="number" step="0.01" required autoFocus className="w-full p-5 bg-gray-50 rounded-xl border-2 border-gray-200 text-3xl outline-none focus:border-blue-400" />
-                </div>
-                <div>
-                  <label className="block text-gray-500 mb-2">{selectedProduct.mode === 'in' ? '买入' : '卖出'}价格 (元)</label>
-                  <input name="price" type="number" step="0.01" defaultValue={selectedProduct.price} required className="w-full p-5 bg-gray-50 rounded-xl border-2 border-gray-200 text-3xl outline-none focus:border-blue-400" />
-                </div>
-                <div className="flex gap-4 pt-4">
-                  <button type="button" onClick={() => setSelectedProduct(null)} className="flex-1 py-5 rounded-2xl bg-gray-100 font-bold text-gray-500 hover:bg-gray-200 transition-colors">取消</button>
-                  <button type="submit" disabled={isPending} className="flex-1 py-5 rounded-2xl bg-blue-600 text-white font-bold hover:bg-blue-700 shadow-lg disabled:opacity-50 transition-all">
-                    {isPending ? '提交中...' : '确认提交'}
-                  </button>
-                </div>
-              </form>
+      {/* --- 弹窗：新增商品资料 --- */}
+      {showAddProduct && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4 z-[101]">
+          <div className="bg-white w-full max-w-lg rounded-[40px] p-10 shadow-2xl animate-in zoom-in duration-200">
+            <h2 className="text-3xl font-black mb-8 text-slate-800 italic">➕ 新增商品资料库</h2>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              const f = new FormData(e.currentTarget);
+              await addProduct({
+                name: f.get('name') as string,
+                spec: f.get('spec') as string,
+                unit: f.get('unit') as string,
+                price: parseFloat(f.get('price') as string),
+                initialStock: parseFloat(f.get('stock') as string)
+              });
+              setShowAddProduct(false);
+              refreshData();
+            }} className="space-y-6">
+              <input name="name" required placeholder="商品名称" className="w-full p-5 bg-slate-50 rounded-2xl border-2 border-slate-100 text-2xl outline-none focus:border-blue-400" />
+              <div className="grid grid-cols-2 gap-4">
+                <input name="spec" placeholder="规格 (如10kg/袋)" className="w-full p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 text-xl outline-none" />
+                <input name="unit" defaultValue="个" placeholder="单位" className="w-full p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 text-xl outline-none" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <input name="price" type="number" step="0.01" placeholder="默认单价" className="w-full p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 text-xl outline-none" />
+                <input name="stock" type="number" step="0.01" placeholder="初始库存" className="w-full p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 text-xl outline-none" />
+              </div>
+              <div className="flex gap-4 pt-6">
+                <button type="button" onClick={() => setShowAddProduct(false)} className="flex-1 py-5 rounded-2xl font-bold text-slate-400">取消</button>
+                <button type="submit" className="flex-1 py-5 rounded-2xl bg-slate-900 text-white font-bold shadow-lg">确认入库</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- 弹窗：查看单据详情 --- */}
+      {selectedBill && (
+        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md flex items-center justify-center p-8 z-[120]">
+          <div className="bg-white w-full max-w-2xl rounded-[40px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in duration-200">
+            <div className={`p-8 text-white flex justify-between items-start ${selectedBill.type === 'in' ? 'bg-blue-600' : 'bg-orange-600'}`}>
+              <div>
+                <h2 className="text-3xl font-black italic">{selectedBill.type === 'in' ? '📥 入库单详情' : '📤 出库单详情'}</h2>
+                <div className="mt-2 text-white/70 font-mono text-sm">{selectedBill.bill_no}</div>
+                <div className="mt-1 text-white/50 text-xs">{selectedBill.time}</div>
+              </div>
+              <button onClick={() => setSelectedBill(null)} className="bg-black/20 hover:bg-black/40 w-10 h-10 rounded-full flex items-center justify-center">✕</button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-8">
+              <div className="space-y-4">
+                {billItems.map((item, i) => (
+                  <div key={i} className="flex justify-between items-center border-b pb-4 border-slate-50 last:border-0">
+                    <div>
+                      <div className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                        {item.name} 
+                        <span className="text-slate-400 text-sm font-normal">[{item.spec || '无'}]</span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-black text-xl text-slate-700">{item.quantity} <span className="text-sm font-normal text-slate-400">{item.unit}</span></div>
+                      <div className="text-sm text-slate-400">单价 ¥{item.price.toFixed(2)}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="p-8 bg-slate-50 border-t flex justify-between items-center">
+              <div className="text-slate-400 font-bold uppercase text-xs tracking-widest">单据合计金额</div>
+              <div className="text-4xl font-black text-slate-900">¥ {selectedBill.total_amount.toFixed(2)}</div>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Add Product Modal */}
-        {showAddForm && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-            <div className="bg-white w-full max-w-lg rounded-3xl p-8 shadow-2xl animate-in fade-in zoom-in duration-200">
-              <h2 className="text-3xl font-bold mb-6">➕ 新增商品资料</h2>
-              <form onSubmit={handleAddProduct} className="space-y-5">
-                <div>
-                  <label className="block text-gray-500 mb-1">商品名称</label>
-                  <input name="name" required placeholder="例如：大米、鸡蛋" className="w-full p-4 bg-gray-50 rounded-xl border-2 border-gray-200 text-2xl outline-none focus:border-blue-400" />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-gray-500 mb-1">规格</label>
-                    <input name="spec" placeholder="例如：5kg/袋" className="w-full p-4 bg-gray-50 rounded-xl border-2 border-gray-200 text-2xl outline-none focus:border-blue-400" />
-                  </div>
-                  <div>
-                    <label className="block text-gray-500 mb-1">单位</label>
-                    <input name="unit" defaultValue="个" className="w-full p-4 bg-gray-50 rounded-xl border-2 border-gray-200 text-2xl outline-none focus:border-blue-400" />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-gray-500 mb-1">初始价格</label>
-                    <input name="price" type="number" step="0.01" defaultValue="0" className="w-full p-4 bg-gray-50 rounded-xl border-2 border-gray-200 text-2xl outline-none focus:border-blue-400" />
-                  </div>
-                  <div>
-                    <label className="block text-gray-500 mb-1">初始库存</label>
-                    <input name="stock" type="number" step="0.01" defaultValue="0" className="w-full p-4 bg-gray-50 rounded-xl border-2 border-gray-200 text-2xl outline-none focus:border-blue-400" />
-                  </div>
-                </div>
-                <div className="flex gap-4 pt-4">
-                  <button type="button" onClick={() => setShowAddForm(false)} className="flex-1 py-5 rounded-2xl bg-gray-100 font-bold text-gray-500 hover:bg-gray-200 transition-colors">取消</button>
-                  <button type="submit" disabled={isPending} className="flex-1 py-5 rounded-2xl bg-blue-600 text-white font-bold hover:bg-blue-700 shadow-lg disabled:opacity-50 transition-all">
-                    {isPending ? '提交中...' : '确认添加'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-      </div>
     </main>
   );
 }

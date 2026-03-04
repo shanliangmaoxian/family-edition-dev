@@ -23,6 +23,7 @@ export async function getTauriDB() {
     CREATE TABLE IF NOT EXISTS transactions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       product_id INTEGER,
+      bill_no TEXT,
       type TEXT CHECK(type IN ('in', 'out')),
       quantity REAL NOT NULL,
       price REAL,
@@ -32,7 +33,93 @@ export async function getTauriDB() {
     );
   `);
   
+  // --- 数据库自动迁移：检查并添加 bill_no 字段 ---
+  try {
+    const columns = await db.select<any[]>('PRAGMA table_info(transactions)');
+    const hasBillNo = columns.some(c => c.name === 'bill_no');
+    if (!hasBillNo) {
+      console.log('检测到旧版数据库，正在升级：添加 bill_no 字段...');
+      await db.execute('ALTER TABLE transactions ADD COLUMN bill_no TEXT');
+    }
+  } catch (e) {
+    console.error('数据库升级检查失败:', e);
+  }
+  
   return db;
+}
+
+// --- 批量记录交易 ---
+export async function recordBatchTransaction(data: {
+  type: 'in' | 'out';
+  items: Array<{
+    productId: number;
+    quantity: number;
+    price: number;
+  }>;
+}) {
+  const conn = await getTauriDB();
+  const billNo = `${data.type === 'in' ? 'IN' : 'OUT'}${Date.now()}`;
+
+  for (const item of data.items) {
+    const delta = data.type === 'in' ? item.quantity : -item.quantity;
+    
+    await conn.execute(
+      'INSERT INTO transactions (product_id, bill_no, type, quantity, price) VALUES (?, ?, ?, ?, ?)',
+      [item.productId, billNo, data.type, item.quantity, item.price]
+    );
+    
+    await conn.execute(
+      'UPDATE products SET stock = stock + ?, price = ? WHERE id = ?',
+      [delta, item.price, item.productId]
+    );
+  }
+  return billNo;
+}
+
+// --- 获取单据历史 ---
+export async function getTransactionHistory() {
+  const conn = await getTauriDB();
+  return conn.select<any[]>(`
+    SELECT 
+      bill_no, 
+      type, 
+      datetime(timestamp, 'localtime') as time,
+      SUM(quantity * price) as total_amount,
+      COUNT(*) as item_count
+    FROM transactions 
+    GROUP BY bill_no 
+    ORDER BY timestamp DESC
+    LIMIT 50
+  `);
+}
+
+// --- 获取单据详情 ---
+export async function getBillDetails(billNo: string) {
+  const conn = await getTauriDB();
+  return conn.select<any[]>(`
+    SELECT 
+      t.quantity, 
+      t.price, 
+      p.name, 
+      p.unit, 
+      p.spec
+    FROM transactions t
+    JOIN products p ON t.product_id = p.id
+    WHERE t.bill_no = ?
+  `, [billNo]);
+}
+
+// --- 删除商品 ---
+export async function deleteProduct(id: number) {
+  const conn = await getTauriDB();
+  
+  // 检查是否有交易记录
+  const transactions = await conn.select<any[]>('SELECT id FROM transactions WHERE product_id = ? LIMIT 1', [id]);
+  if (transactions.length > 0) {
+    throw new Error('该商品已有出入库记录，无法删除以保护历史数据。');
+  }
+  
+  return conn.execute('DELETE FROM products WHERE id = ?', [id]);
 }
 
 // --- 搜索功能 ---
