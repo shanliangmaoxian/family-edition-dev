@@ -34,3 +34,10 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+
+##  修改执行
+  每次发布前，你需要执行以下步骤：
+   1. 修改版本号：同时修改 src-tauri/tauri.conf.json、src-tauri/Cargo.toml 和 package.json 中的 version 字段（例如都改为 0.1.1）。
+   2. 提交代码：git commit -am "chore: release v0.1.1"
+   3. 推送 Tag：git tag v0.1.1 且 git push origin v0.1.1
