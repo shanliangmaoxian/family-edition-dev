@@ -26,6 +26,7 @@ export async function getTauriDB() {
       type TEXT CHECK(type IN ('in', 'out')),
       quantity REAL NOT NULL,
       price REAL,
+      actual_amount REAL,
       remark TEXT,
       timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(product_id) REFERENCES products(id)
@@ -36,6 +37,9 @@ export async function getTauriDB() {
     const tCols = await db.select<any[]>('PRAGMA table_info(transactions)');
     if (!tCols.some(c => c.name === 'bill_no')) {
       await db.execute('ALTER TABLE transactions ADD COLUMN bill_no TEXT');
+    }
+    if (!tCols.some(c => c.name === 'actual_amount')) {
+      await db.execute('ALTER TABLE transactions ADD COLUMN actual_amount REAL');
     }
     
     const pCols = await db.select<any[]>('PRAGMA table_info(products)');
@@ -52,6 +56,7 @@ export async function getTauriDB() {
 export async function recordBatchTransaction(data: {
   type: 'in' | 'out';
   remark?: string;
+  actualAmount?: number;
   items: Array<{
     productId: number;
     quantity: number;
@@ -64,8 +69,8 @@ export async function recordBatchTransaction(data: {
   for (const item of data.items) {
     const delta = data.type === 'in' ? item.quantity : -item.quantity;
     await conn.execute(
-      'INSERT INTO transactions (product_id, bill_no, type, quantity, price, remark) VALUES (?, ?, ?, ?, ?, ?)',
-      [item.productId, billNo, data.type, item.quantity, item.price, data.remark || '']
+      'INSERT INTO transactions (product_id, bill_no, type, quantity, price, remark, actual_amount) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [item.productId, billNo, data.type, item.quantity, item.price, data.remark || '', data.actualAmount || 0]
     );
     await conn.execute(
       'UPDATE products SET stock = stock + ?, price = ? WHERE id = ?',
@@ -82,6 +87,7 @@ export async function getTransactionHistory() {
       bill_no, 
       type, 
       MAX(remark) as remark,
+      MAX(actual_amount) as actual_amount,
       datetime(timestamp, 'localtime') as time,
       SUM(quantity * price) as total_amount,
       COUNT(*) as item_count
@@ -98,6 +104,7 @@ export async function getBillDetails(billNo: string) {
     SELECT 
       t.quantity, 
       t.price, 
+      t.actual_amount,
       t.remark as bill_remark,
       p.name, 
       p.unit, 

@@ -46,6 +46,31 @@ export async function exportInventoryToExcel() {
   }
 }
 
+export async function exportBillToExcel(bill: any, items: any[]) {
+  if (!isTauri) return;
+  try {
+    const headers = '分类,商品名称,规格,单位,数量,成交单价,小计';
+    const rows = items.map(item => 
+      `"${item.category}","${item.name}","${item.spec}","${item.unit}",${item.quantity},${item.price},${(item.quantity * item.price).toFixed(2)}`
+    ).join('\n');
+    
+    const summary = `\n\n单号：,${bill.bill_no}\n客户/备注：,${bill.remark || '无'}\n时间：,${bill.time}\n合计金额：,${bill.total_amount.toFixed(2)}`;
+    const csvContent = '\uFEFF' + headers + '\n' + rows + summary;
+
+    const filePath = await save({
+      filters: [{ name: 'Excel CSV', extensions: ['csv'] }],
+      defaultPath: `九月进销存_${bill.type === 'in' ? '入库单' : '出库单'}_${bill.bill_no}.csv`
+    });
+
+    if (filePath) {
+      await writeFile(filePath, new TextEncoder().encode(csvContent));
+      return { success: true, path: filePath };
+    }
+  } catch (error: any) {
+    return { success: false, message: error.message };
+  }
+}
+
 // --- 对话框辅助 ---
 export async function askConfirm(messageStr: string, title: string = '确认') {
   if (!isTauri) return window.confirm(messageStr);
